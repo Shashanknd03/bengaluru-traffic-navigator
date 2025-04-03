@@ -14,7 +14,7 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Bengaluru coordinates
-const BENGALURU_CENTER = [77.5946, 12.9716];
+const BENGALURU_CENTER: [number, number] = [77.5946, 12.9716];
 const BENGALURU_BOUNDS = {
   north: 13.1,
   south: 12.8,
@@ -356,7 +356,8 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       <div ref={mapContainerRef} className="absolute inset-0" />
       
       {/* CSS for markers */}
-      <style jsx global>{`
+      <style>
+        {`
         @keyframes pulse {
           0% { opacity: 0.7; }
           50% { opacity: 1; }
@@ -370,7 +371,8 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         .bg-traffic-green { background-color: #4ade80; }
         .bg-traffic-amber { background-color: #fbbf24; }
         .bg-traffic-red { background-color: #ef4444; }
-      `}</style>
+      `}
+      </style>
       
       {/* Map controls */}
       <div className="absolute top-4 right-4 bg-white p-2 rounded-md shadow-md z-10 space-y-2">

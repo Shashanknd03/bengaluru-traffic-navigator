@@ -1,233 +1,193 @@
 
-import { TrafficPoint } from '../../types/traffic';
-import TrafficPointModel from '../models/TrafficPoint';
-import TrafficMetrics from '../models/TrafficMetrics';
-import { Server as SocketServer } from 'socket.io';
 import http from 'http';
+import { Server, Socket } from 'socket.io';
+import mongoose from 'mongoose';
+import TrafficPoint from '../models/TrafficPoint';
+import TrafficMetrics from '../models/TrafficMetrics';
+import TrafficAlert from '../models/TrafficAlert';
 
-/**
- * Service for handling real-time traffic data processing
- */
 class RealTimeDataService {
-  private io: SocketServer | null = null;
-  private updateInterval: NodeJS.Timeout | null = null;
-  private readonly UPDATE_FREQUENCY = 10000; // 10 seconds
-  
-  /**
-   * Initialize the real-time data service with a socket server
-   */
-  initialize(server: http.Server) {
-    this.io = new SocketServer(server, {
+  private static io: Server;
+  private static clients: Map<string, Socket> = new Map();
+  private static areaSubscriptions: Map<string, any> = new Map();
+  private static updateInterval: NodeJS.Timeout | null = null;
+  private static isInitialized: boolean = false;
+
+  static initialize(server: http.Server): void {
+    if (this.isInitialized) return;
+
+    // Initialize Socket.IO server
+    this.io = new Server(server, {
       cors: {
         origin: '*',
         methods: ['GET', 'POST']
       }
     });
-    
-    this.io.on('connection', (socket) => {
-      console.log('Client connected to real-time traffic data');
-      
-      // Send initial data to the client
-      this.sendLatestTrafficData(socket);
-      
+
+    // Socket connection handling
+    this.io.on('connection', (socket: Socket) => {
+      console.log(`Client connected: ${socket.id}`);
+      this.clients.set(socket.id, socket);
+
+      // Send initial data
+      this.sendInitialDataToClient(socket);
+
+      // Handle area subscriptions
+      socket.on('subscribe-area', (area: any) => {
+        console.log(`Client ${socket.id} subscribed to area:`, area);
+        this.areaSubscriptions.set(socket.id, area);
+        this.sendAreaDataToClient(socket, area);
+      });
+
+      socket.on('unsubscribe-area', () => {
+        console.log(`Client ${socket.id} unsubscribed from area`);
+        this.areaSubscriptions.delete(socket.id);
+      });
+
+      // Cleanup on disconnect
       socket.on('disconnect', () => {
-        console.log('Client disconnected from real-time traffic data');
-      });
-      
-      // Subscribe to area-specific updates
-      socket.on('subscribe-area', (bounds) => {
-        socket.join(`area-${this.getBoundKey(bounds)}`);
-        this.sendAreaTrafficData(socket, bounds);
-      });
-      
-      // Unsubscribe from area-specific updates
-      socket.on('unsubscribe-area', (bounds) => {
-        socket.leave(`area-${this.getBoundKey(bounds)}`);
+        console.log(`Client disconnected: ${socket.id}`);
+        this.clients.delete(socket.id);
+        this.areaSubscriptions.delete(socket.id);
       });
     });
-    
+
     // Start periodic updates
     this.startPeriodicUpdates();
-    
-    return this.io;
+    this.isInitialized = true;
+    console.log('Real-time data service initialized');
   }
-  
-  /**
-   * Start sending periodic traffic updates
-   */
-  private startPeriodicUpdates() {
+
+  static async sendInitialDataToClient(socket: Socket): Promise<void> {
+    try {
+      // Send traffic data
+      const trafficPoints = await TrafficPoint.find()
+        .sort({ timestamp: -1 })
+        .limit(100)
+        .lean();
+      
+      socket.emit('traffic-data', trafficPoints);
+
+      // Send system metrics
+      const metrics = await TrafficMetrics.findOne()
+        .sort({ timestamp: -1 })
+        .lean();
+      
+      if (metrics) {
+        socket.emit('system-metrics', metrics);
+      }
+    } catch (error) {
+      console.error('Error sending initial data:', error);
+      socket.emit('error', { message: 'Failed to load initial data' });
+    }
+  }
+
+  static async sendAreaDataToClient(socket: Socket, area: any): Promise<void> {
+    try {
+      if (!area || !area.north || !area.south || !area.east || !area.west) {
+        return;
+      }
+
+      const trafficPoints = await TrafficPoint.find({
+        'location.lat': { $gte: area.south, $lte: area.north },
+        'location.lng': { $gte: area.west, $lte: area.east }
+      })
+        .sort({ timestamp: -1 })
+        .limit(100)
+        .lean();
+      
+      socket.emit('area-traffic-data', trafficPoints);
+    } catch (error) {
+      console.error('Error sending area data:', error);
+      socket.emit('error', { message: 'Failed to load area data' });
+    }
+  }
+
+  static startPeriodicUpdates(): void {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
     }
-    
+
     this.updateInterval = setInterval(async () => {
       try {
+        // Broadcast traffic updates
         await this.broadcastTrafficUpdates();
+        
+        // Broadcast metrics updates
+        await this.broadcastMetricsUpdates();
+        
+        // Broadcast area-specific updates
+        await this.broadcastAreaUpdates();
       } catch (error) {
-        console.error('Error broadcasting traffic updates:', error);
+        console.error('Error in periodic updates:', error);
       }
-    }, this.UPDATE_FREQUENCY);
+    }, 5000); // Update every 5 seconds
   }
-  
-  /**
-   * Broadcast traffic updates to all connected clients
-   */
-  private async broadcastTrafficUpdates() {
-    if (!this.io) return;
-    
+
+  static async broadcastTrafficUpdates(): Promise<void> {
     try {
-      // Get latest traffic data
-      const latestTrafficPoints = await TrafficPointModel.find()
+      const trafficPoints = await TrafficPoint.find()
         .sort({ timestamp: -1 })
-        .limit(100);
+        .limit(100)
+        .lean();
       
-      // Broadcast to all clients
-      this.io.emit('traffic-update', latestTrafficPoints);
-      
-      // Get system metrics
-      const systemMetrics = await this.getSystemMetrics();
-      this.io.emit('metrics-update', systemMetrics);
-      
+      this.io.emit('traffic-update', trafficPoints);
     } catch (error) {
-      console.error('Error fetching traffic data for broadcast:', error);
+      console.error('Error broadcasting traffic updates:', error);
     }
   }
-  
-  /**
-   * Send latest traffic data to a specific client
-   */
-  private async sendLatestTrafficData(socket: any) {
+
+  static async broadcastMetricsUpdates(): Promise<void> {
     try {
-      const latestTrafficPoints = await TrafficPointModel.find()
+      const metrics = await TrafficMetrics.findOne()
         .sort({ timestamp: -1 })
-        .limit(100);
+        .lean();
       
-      socket.emit('traffic-data', latestTrafficPoints);
-      
-      // Send system metrics as well
-      const systemMetrics = await this.getSystemMetrics();
-      socket.emit('system-metrics', systemMetrics);
-      
-    } catch (error) {
-      console.error('Error sending latest traffic data:', error);
-    }
-  }
-  
-  /**
-   * Send area-specific traffic data to a client
-   */
-  private async sendAreaTrafficData(socket: any, bounds: any) {
-    try {
-      const { north, south, east, west } = bounds;
-      
-      if (!north || !south || !east || !west) {
-        socket.emit('error', { message: 'Invalid area bounds' });
-        return;
+      if (metrics) {
+        this.io.emit('metrics-update', metrics);
       }
-      
-      const areaTrafficPoints = await TrafficPointModel.find({
-        'location.lat': { $gte: Number(south), $lte: Number(north) },
-        'location.lng': { $gte: Number(west), $lte: Number(east) }
-      }).sort({ timestamp: -1 });
-      
-      socket.emit('area-traffic-data', areaTrafficPoints);
-      
     } catch (error) {
-      console.error('Error sending area traffic data:', error);
+      console.error('Error broadcasting metrics updates:', error);
     }
   }
-  
-  /**
-   * Notify clients about a new traffic point
-   */
-  async notifyNewTrafficPoint(trafficPoint: TrafficPoint) {
-    if (!this.io) return;
-    
-    this.io.emit('new-traffic-point', trafficPoint);
-    
-    // Also notify area-specific rooms if applicable
-    const { lat, lng } = trafficPoint.location;
-    const areas = this.determineAreasForPoint(lat, lng);
-    
-    areas.forEach(area => {
-      this.io?.to(`area-${area}`).emit('new-area-traffic-point', trafficPoint);
-    });
-  }
-  
-  /**
-   * Get system-wide traffic metrics
-   */
-  private async getSystemMetrics() {
+
+  static async broadcastAreaUpdates(): Promise<void> {
     try {
-      // Get latest metrics
-      const lastHour = new Date(Date.now() - 60 * 60 * 1000);
-      
-      const systemMetrics = await TrafficMetrics.aggregate([
-        {
-          $match: {
-            timestamp: { $gte: lastHour }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            avgSpeed: { $avg: '$metrics.averageSpeed' },
-            totalVehicles: { $sum: '$metrics.vehicleCount' },
-            avgCongestion: { $avg: '$metrics.congestionLevel' },
-            lastUpdate: { $max: '$timestamp' }
-          }
+      // For each client with area subscription
+      for (const [clientId, area] of this.areaSubscriptions.entries()) {
+        const socket = this.clients.get(clientId);
+        if (socket && area) {
+          const trafficPoints = await TrafficPoint.find({
+            'location.lat': { $gte: area.south, $lte: area.north },
+            'location.lng': { $gte: area.west, $lte: area.east }
+          })
+            .sort({ timestamp: -1 })
+            .limit(100)
+            .lean();
+          
+          socket.emit('area-traffic-data', trafficPoints);
         }
-      ]);
-      
-      return systemMetrics[0] || {
-        avgSpeed: 0,
-        totalVehicles: 0,
-        avgCongestion: 0,
-        lastUpdate: new Date()
-      };
-      
+      }
     } catch (error) {
-      console.error('Error getting system metrics:', error);
-      return {
-        avgSpeed: 0,
-        totalVehicles: 0,
-        avgCongestion: 0,
-        lastUpdate: new Date()
-      };
+      console.error('Error broadcasting area updates:', error);
     }
   }
-  
-  /**
-   * Helper to convert bounds to a string key
-   */
-  private getBoundKey(bounds: any): string {
-    return `${bounds.north}-${bounds.south}-${bounds.east}-${bounds.west}`;
-  }
-  
-  /**
-   * Determine which area subscriptions a point belongs to
-   */
-  private determineAreasForPoint(lat: number, lng: number): string[] {
-    // In a real implementation, this would use a spatial index or geofencing
-    // For this example, we'll return a simple placeholder
-    return ['bengaluru-center'];
-  }
-  
-  /**
-   * Shutdown the real-time service
-   */
-  shutdown() {
+
+  static shutdown(): void {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
-    
+
     if (this.io) {
       this.io.close();
-      this.io = null;
+      console.log('Real-time data service shutdown');
     }
+
+    this.clients.clear();
+    this.areaSubscriptions.clear();
+    this.isInitialized = false;
   }
 }
 
-// Export as singleton
-export default new RealTimeDataService();
+export default RealTimeDataService;
