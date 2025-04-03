@@ -1,58 +1,29 @@
 
 import React from 'react';
-import { Bell, Settings, Menu, Search } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Link } from 'react-router-dom';
 
-const Header: React.FC = () => {
+const Header = () => {
   return (
-    <header className="border-b bg-white">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <Menu className="h-5 w-5" />
-            </Button>
-            <div className="flex items-center">
-              <div className="rounded-full bg-traffic-blue w-8 h-8 flex items-center justify-center text-white font-semibold mr-2">
-                B
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-traffic-blue">
-                  Bengaluru Traffic
-                </h1>
-                <p className="text-xs text-muted-foreground hidden md:block">
-                  Intelligent Traffic Management System
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="hidden md:flex items-center max-w-sm w-full mx-4">
-            <div className="relative flex-grow">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input 
-                type="search"
-                placeholder="Search locations, routes..."
-                className="pl-8 w-full bg-gray-50"
-              />
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Settings className="h-5 w-5" />
-            </Button>
-            <div className="hidden md:block border-l pl-2 ml-2">
-              <Button size="sm" variant="default">
-                Traffic Authority Login
-              </Button>
-            </div>
-          </div>
-        </div>
+    <header className="bg-white border-b sticky top-0 z-50">
+      <div className="container mx-auto px-4 py-3 flex justify-between items-center">
+        <Link to="/" className="font-bold text-xl text-blue-600">
+          Traffic Management System
+        </Link>
+        
+        <nav>
+          <ul className="flex space-x-6">
+            <li>
+              <Link to="/" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Dashboard
+              </Link>
+            </li>
+            <li>
+              <Link to="/bengaluru-map" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Bengaluru Map
+              </Link>
+            </li>
+          </ul>
+        </nav>
       </div>
     </header>
   );
