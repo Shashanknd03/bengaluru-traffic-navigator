@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { TrafficAlert } from '../types/traffic';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, AlertCircle, Construction, Calendar, CloudRain, BarrierBlock } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Construction, Calendar, CloudRain, Ban } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface TrafficAlertsListProps {
@@ -22,7 +23,7 @@ const TrafficAlertsList: React.FC<TrafficAlertsListProps> = ({ alerts }) => {
       case 'construction': return <Construction className="h-4 w-4" />;
       case 'event': return <Calendar className="h-4 w-4" />;
       case 'weatherHazard': return <CloudRain className="h-4 w-4" />;
-      case 'roadClosure': return <BarrierBlock className="h-4 w-4" />;
+      case 'roadClosure': return <Ban className="h-4 w-4" />;
       default: return <AlertCircle className="h-4 w-4" />;
     }
   };
