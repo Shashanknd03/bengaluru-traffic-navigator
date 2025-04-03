@@ -1,10 +1,14 @@
-
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import mongoose from 'mongoose';
 import TrafficPoint from '../models/TrafficPoint';
 import TrafficMetrics from '../models/TrafficMetrics';
 import TrafficAlert from '../models/TrafficAlert';
+
+// Use import.meta.env if this file is processed by Vite, otherwise keep process.env
+const apiUrl = typeof import.meta !== 'undefined' 
+  ? import.meta.env.VITE_APP_API_URL 
+  : process.env.VITE_APP_API_URL || 'http://localhost:5000';
 
 class RealTimeDataService {
   private static io: Server;

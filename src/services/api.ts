@@ -12,7 +12,8 @@ import {
   TrafficSignalTiming
 } from '../types/traffic';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Use Vite's import.meta.env instead of process.env
+const API_URL = import.meta.env.VITE_APP_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_URL,

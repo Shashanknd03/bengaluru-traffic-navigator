@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import io, { Socket } from 'socket.io-client';
 import { TrafficPoint, TrafficMetrics } from '../types/traffic';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// Use Vite's import.meta.env instead of process.env for environment variables
+const API_URL = import.meta.env.VITE_APP_API_URL || 'http://localhost:5000';
 
 interface UseRealTimeTrafficOptions {
   enabled?: boolean;
