@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   TrafficPoint, 
@@ -7,7 +6,7 @@ import {
   TrafficAlert,
   EmergencyVehicle 
 } from '../types/traffic';
-import { Map, InfoCircle, Navigation } from 'lucide-react';
+import { Map, Info, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface TrafficMapProps {
@@ -104,7 +103,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
             <span>Change Style</span>
           </Button>
           <Button variant="outline" size="sm" className="flex gap-2 items-center">
-            <InfoCircle size={14} />
+            <Info size={14} />
             <span>Help</span>
           </Button>
         </div>

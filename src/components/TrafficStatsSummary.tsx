@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertCircle, Car, Clock, MapPin, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Car, Clock, MapPin } from 'lucide-react';
 import { TrafficMetrics, TrafficAlert } from '../types/traffic';
 
 interface TrafficStatsSummaryProps {
