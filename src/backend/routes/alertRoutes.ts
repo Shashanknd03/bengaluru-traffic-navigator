@@ -10,6 +10,7 @@ import {
 
 const router = express.Router();
 
+// Define routes correctly
 router.get('/', getAllAlerts);
 router.get('/area', getAlertsByArea);
 router.post('/', createAlert);

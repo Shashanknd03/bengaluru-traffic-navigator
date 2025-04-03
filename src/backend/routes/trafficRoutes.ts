@@ -9,6 +9,7 @@ import {
 
 const router = express.Router();
 
+// Define routes correctly
 router.get('/points', getAllTrafficPoints);
 router.get('/points/area', getTrafficPointsByArea);
 router.post('/points', addTrafficPoint);
