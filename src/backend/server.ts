@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import trafficRoutes from './routes/trafficRoutes';
 import alertRoutes from './routes/alertRoutes';
+import metricsRoutes from './routes/metricsRoutes';
 import errorHandler from './middleware/errorHandler';
 
 // Load environment variables
@@ -25,6 +26,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/traffic-m
 // Routes
 app.use('/api/traffic', trafficRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

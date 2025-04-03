@@ -2,17 +2,21 @@
 import express from 'express';
 import { 
   getAllAlerts, 
-  getAlertsByArea, 
+  getAlertsByArea,
+  getAlertsByProximity,
   createAlert,
   updateAlert,
-  closeAlert
+  closeAlert,
+  getAlertStatistics
 } from '../controllers/alertController';
 
 const router = express.Router();
 
-// Define routes correctly
+// Define routes
 router.get('/', getAllAlerts);
 router.get('/area', getAlertsByArea);
+router.get('/proximity', getAlertsByProximity);
+router.get('/statistics', getAlertStatistics);
 router.post('/', createAlert);
 router.put('/:id', updateAlert);
 router.patch('/:id/close', closeAlert);
