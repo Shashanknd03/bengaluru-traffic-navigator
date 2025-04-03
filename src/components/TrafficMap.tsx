@@ -10,6 +10,20 @@ import {
 import { Map, Info, Navigation, Layers, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+
+// Bengaluru coordinates
+const BENGALURU_CENTER = [77.5946, 12.9716];
+const BENGALURU_BOUNDS = {
+  north: 13.1,
+  south: 12.8,
+  east: 77.8,
+  west: 77.4
+};
+
+// Use a public token for demo purposes - in production you would use an environment variable
+mapboxgl.accessToken = 'pk.eyJ1IjoiZGVtb3VzZXIiLCJhIjoiY2txOHoxb2k4MDYxbDJ2bnhpZGloZWprcCJ9.lRLjk3y3u1ZwGBxW_jZ9Lw';
 
 interface TrafficMapProps {
   trafficPoints: TrafficPoint[];
@@ -37,60 +51,267 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   showEmergencyVehicles
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const [mapInitialized, setMapInitialized] = useState(false);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
-  const [zoomLevel, setZoomLevel] = useState(12);
-  const [rotation, setRotation] = useState(0);
+  const [markersInitialized, setMarkersInitialized] = useState(false);
   
-  // This would ideally use a real map API like Google Maps, Mapbox, or Leaflet
-  // For this prototype, we'll create a visual representation using HTML/CSS/ThreeJS
+  // Store marker references for cleanup
+  const trafficMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const intersectionMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const predictionMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const alertMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const emergencyMarkersRef = useRef<mapboxgl.Marker[]>([]);
   
+  // Initialize map on component mount
   useEffect(() => {
-    if (mapContainerRef.current && !mapInitialized) {
-      setMapInitialized(true);
-      // In a real implementation, this is where map initialization would happen
-      // For 3D visualization, we would initialize Three.js here
-      initializeMap();
-    }
-  }, [mapInitialized]);
-  
-  // In a real implementation, this would initialize the 3D map
-  const initializeMap = () => {
-    // This is a placeholder for the actual Three.js initialization
-    console.log('Initializing map in', viewMode, 'mode');
+    if (!mapContainerRef.current || mapRef.current) return;
     
-    // For a real implementation, the following would be done:
-    // 1. Load 3D models of the city
-    // 2. Setup camera and lighting
-    // 3. Create particle systems for traffic visualization
-    // 4. Set up event listeners for user interaction
-  };
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center: BENGALURU_CENTER,
+      zoom: 11,
+      pitch: viewMode === '3d' ? 45 : 0,
+      bearing: 0,
+      antialias: true
+    });
+    
+    // Add navigation controls
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    
+    // Save map reference
+    mapRef.current = map;
+    
+    // Set up 3D terrain if using 3D mode
+    map.on('load', () => {
+      if (viewMode === '3d') {
+        map.addSource('mapbox-dem', {
+          'type': 'raster-dem',
+          'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+          'tileSize': 512,
+          'maxzoom': 14
+        });
+        
+        map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+        
+        map.addLayer({
+          'id': 'sky',
+          'type': 'sky',
+          'paint': {
+            'sky-type': 'atmosphere',
+            'sky-atmosphere-sun': [0.0, 0.0],
+            'sky-atmosphere-sun-intensity': 15
+          }
+        });
+      }
+    });
+    
+    // Cleanup
+    return () => {
+      clearAllMarkers();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
   
-  // Handle view mode toggle
+  // Handle view mode change
   useEffect(() => {
-    if (mapInitialized) {
-      console.log('Switching to', viewMode, 'view mode');
-      // In a real implementation, this would rebuild the map with 2D or 3D rendering
+    const map = mapRef.current;
+    if (!map) return;
+    
+    map.setPitch(viewMode === '3d' ? 45 : 0);
+    
+    if (viewMode === '3d' && map.getStyle().layers) {
+      // Add 3D terrain if not already added
+      if (!map.getSource('mapbox-dem')) {
+        map.addSource('mapbox-dem', {
+          'type': 'raster-dem',
+          'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+          'tileSize': 512,
+          'maxzoom': 14
+        });
+        
+        map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+      }
+      
+      // Add sky layer if not already added
+      if (!map.getLayer('sky')) {
+        map.addLayer({
+          'id': 'sky',
+          'type': 'sky',
+          'paint': {
+            'sky-type': 'atmosphere',
+            'sky-atmosphere-sun': [0.0, 0.0],
+            'sky-atmosphere-sun-intensity': 15
+          }
+        });
+      }
+    } else if (viewMode === '2d') {
+      // Remove terrain in 2D mode
+      map.setTerrain(null);
+      
+      // Remove sky layer in 2D mode
+      if (map.getLayer('sky')) {
+        map.removeLayer('sky');
+      }
     }
-  }, [viewMode, mapInitialized]);
+    
+    // Refresh all markers
+    updateMapMarkers();
+  }, [viewMode]);
   
-  // Zoom controls
-  const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 1, 20));
+  // Update markers when data or visibility changes
+  useEffect(() => {
+    updateMapMarkers();
+  }, [trafficPoints, intersections, predictions, alerts, emergencyVehicles, 
+      showTraffic, showIntersections, showPredictions, showAlerts, showEmergencyVehicles]);
+  
+  // Clear all markers
+  const clearAllMarkers = () => {
+    [...trafficMarkersRef.current, 
+     ...intersectionMarkersRef.current, 
+     ...predictionMarkersRef.current, 
+     ...alertMarkersRef.current,
+     ...emergencyMarkersRef.current].forEach(marker => marker.remove());
+    
+    trafficMarkersRef.current = [];
+    intersectionMarkersRef.current = [];
+    predictionMarkersRef.current = [];
+    alertMarkersRef.current = [];
+    emergencyMarkersRef.current = [];
   };
   
-  const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 1, 8));
+  // Update all map markers
+  const updateMapMarkers = () => {
+    if (!mapRef.current || !mapRef.current.loaded()) return;
+    
+    // Clear existing markers
+    clearAllMarkers();
+    
+    // Add traffic points
+    if (showTraffic) {
+      trafficMarkersRef.current = trafficPoints.map(point => {
+        const el = document.createElement('div');
+        el.className = `traffic-marker ${getStatusClass(point.status)}`;
+        el.style.width = '10px';
+        el.style.height = '10px';
+        el.style.borderRadius = '50%';
+        
+        // Create tooltip
+        el.setAttribute('title', `${point.roadName}: ${point.speedKmph} km/h`);
+        
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([point.location.lng, point.location.lat])
+          .addTo(mapRef.current!);
+        
+        return marker;
+      });
+    }
+    
+    // Add intersections
+    if (showIntersections) {
+      intersectionMarkersRef.current = intersections.map(intersection => {
+        const el = document.createElement('div');
+        el.className = `intersection-marker ${getStatusClass(intersection.status)}`;
+        el.style.width = '15px';
+        el.style.height = '15px';
+        el.style.borderRadius = '3px';
+        el.style.border = '2px solid white';
+        
+        // Create tooltip
+        el.setAttribute('title', intersection.name);
+        
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([intersection.location.lng, intersection.location.lat])
+          .addTo(mapRef.current!);
+        
+        return marker;
+      });
+    }
+    
+    // Add predictions
+    if (showPredictions) {
+      predictionMarkersRef.current = predictions.map(prediction => {
+        const el = document.createElement('div');
+        el.className = `prediction-marker ${getStatusClass(prediction.predictedStatus)}`;
+        el.style.width = '15px';
+        el.style.height = '15px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.opacity = '0.7';
+        el.style.animation = 'pulse 2s infinite';
+        
+        // Create tooltip
+        el.setAttribute('title', `Predicted: ${prediction.predictedStatus} (${prediction.timeFrame})`);
+        
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([prediction.location.lng, prediction.location.lat])
+          .addTo(mapRef.current!);
+        
+        return marker;
+      });
+    }
+    
+    // Add alerts
+    if (showAlerts) {
+      alertMarkersRef.current = alerts.map(alert => {
+        const el = document.createElement('div');
+        el.className = 'alert-marker';
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.transform = 'rotate(45deg)';
+        el.style.backgroundColor = '#ffcc00';
+        
+        // Create tooltip
+        el.setAttribute('title', `${alert.type}: ${alert.description}`);
+        
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([alert.location.lng, alert.location.lat])
+          .addTo(mapRef.current!);
+        
+        return marker;
+      });
+    }
+    
+    // Add emergency vehicles
+    if (showEmergencyVehicles) {
+      emergencyMarkersRef.current = emergencyVehicles.map(vehicle => {
+        const el = document.createElement('div');
+        el.className = `emergency-marker ${getEmergencyVehicleClass(vehicle.type)}`;
+        el.style.width = '15px';
+        el.style.height = '15px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.animation = 'pulse 1s infinite';
+        
+        // Display vehicle type initial
+        const textEl = document.createElement('span');
+        textEl.innerText = vehicle.type === 'ambulance' ? 'A' : vehicle.type === 'police' ? 'P' : 'F';
+        textEl.style.position = 'absolute';
+        textEl.style.top = '50%';
+        textEl.style.left = '50%';
+        textEl.style.transform = 'translate(-50%, -50%)';
+        textEl.style.color = 'white';
+        textEl.style.fontSize = '10px';
+        textEl.style.fontWeight = 'bold';
+        el.appendChild(textEl);
+        
+        // Create tooltip
+        el.setAttribute('title', `${vehicle.type} (${vehicle.priority} priority)`);
+        
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([vehicle.location.lng, vehicle.location.lat])
+          .addTo(mapRef.current!);
+        
+        return marker;
+      });
+    }
+    
+    setMarkersInitialized(true);
   };
   
-  // Reset view
-  const handleResetView = () => {
-    setZoomLevel(12);
-    setRotation(0);
-  };
-  
-  // Get color based on traffic status
-  const getStatusColor = (status: 'low' | 'medium' | 'high' | 'severe'): string => {
+  // Helper function to get CSS class based on traffic status
+  const getStatusClass = (status: 'low' | 'medium' | 'high' | 'severe'): string => {
     switch (status) {
       case 'low': return 'bg-traffic-green';
       case 'medium': return 'bg-traffic-amber';
@@ -99,8 +320,9 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       default: return 'bg-gray-400';
     }
   };
-
-  const getEmergencyVehicleColor = (type: 'ambulance' | 'police' | 'fire'): string => {
+  
+  // Helper function to get CSS class for emergency vehicle
+  const getEmergencyVehicleClass = (type: 'ambulance' | 'police' | 'fire'): string => {
     switch (type) {
       case 'ambulance': return 'bg-red-500';
       case 'police': return 'bg-blue-500';
@@ -108,81 +330,47 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       default: return 'bg-gray-400';
     }
   };
-
-  // Convert lat/lng to relative position in the container
-  const getPositionStyle = (lat: number, lng: number) => {
-    // Bengaluru approximate boundaries
-    const northBound = 13.1;
-    const southBound = 12.8;
-    const eastBound = 77.8;
-    const westBound = 77.4;
-    
-    // Calculate percentage within bounds (adjusted for zoom level)
-    const centerLat = (northBound + southBound) / 2;
-    const centerLng = (eastBound + westBound) / 2;
-    
-    const latRange = (northBound - southBound) / (zoomLevel / 12);
-    const lngRange = (eastBound - westBound) / (zoomLevel / 12);
-    
-    const adjustedNorth = centerLat + latRange / 2;
-    const adjustedSouth = centerLat - latRange / 2;
-    const adjustedEast = centerLng + lngRange / 2;
-    const adjustedWest = centerLng - lngRange / 2;
-    
-    const leftPercent = ((lng - adjustedWest) / (adjustedEast - adjustedWest)) * 100;
-    const topPercent = ((adjustedNorth - lat) / (adjustedNorth - adjustedSouth)) * 100;
-    
-    // Apply rotation if in 3D mode
-    if (viewMode === '3d' && rotation !== 0) {
-      // In a real implementation, we would apply 3D transformations
-      // This is a simple placeholder for demonstration
-      return {
-        left: `${Math.min(100, Math.max(0, leftPercent))}%`,
-        top: `${Math.min(100, Math.max(0, topPercent))}%`,
-        transform: `rotate(${rotation}deg)`
-      };
-    }
-    
-    return {
-      left: `${Math.min(100, Math.max(0, leftPercent))}%`,
-      top: `${Math.min(100, Math.max(0, topPercent))}%`
-    };
+  
+  // Handle zoom controls
+  const handleZoomIn = () => {
+    mapRef.current?.zoomIn();
   };
-
-  // Generate 3D effect styles based on traffic status
-  const get3DStyles = (status: 'low' | 'medium' | 'high' | 'severe') => {
-    if (viewMode !== '3d') return {};
-    
-    // In a real implementation, this would apply proper 3D effects
-    // For demonstration, we'll just apply simple CSS transforms
-    
-    const baseHeight = status === 'low' ? 2 : 
-                      status === 'medium' ? 4 : 
-                      status === 'high' ? 7 : 10;
-                      
-    return {
-      boxShadow: `0 0 10px rgba(0,0,0,0.3)`,
-      height: `${baseHeight}px`,
-      marginTop: `-${baseHeight}px`,
-      transform: `translateZ(${baseHeight}px)`
-    };
+  
+  const handleZoomOut = () => {
+    mapRef.current?.zoomOut();
   };
-
+  
+  // Reset view
+  const handleResetView = () => {
+    mapRef.current?.flyTo({
+      center: BENGALURU_CENTER,
+      zoom: 11,
+      pitch: viewMode === '3d' ? 45 : 0,
+      bearing: 0
+    });
+  };
+  
   return (
     <div className="relative bengaluru-map-container bg-traffic-lightGray h-[600px] rounded-lg overflow-hidden">
-      <div 
-        className={`absolute inset-0 bg-[url('https://api.mapbox.com/styles/v1/mapbox/streets-v11/static/77.5946,12.9716,11,0/1000x600?access_token=pk.eyJ1IjoiZGVtb3VzZXIiLCJhIjoiY2txOHoxb2k4MDYxbDJ2bnhpZGloZWprcCJ9.lRLjk3y3u1ZwGBxW_jZ9Lw')] bg-cover bg-center transition-all duration-300 ${viewMode === '3d' ? 'opacity-60' : 'opacity-80'}`} 
-        style={{ transform: `scale(${zoomLevel / 10})` }}
-      >
-        {/* This would be replaced with an actual map in a real implementation */}
-      </div>
+      {/* Map container */}
+      <div ref={mapContainerRef} className="absolute inset-0" />
       
-      <div ref={mapContainerRef} className="absolute inset-0 pointer-events-none">
-        {/* This div would contain the actual 3D visualization in a real implementation */}
-        {viewMode === '3d' && (
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-blue-900/20 z-[1]"></div>
-        )}
-      </div>
+      {/* CSS for markers */}
+      <style jsx global>{`
+        @keyframes pulse {
+          0% { opacity: 0.7; }
+          50% { opacity: 1; }
+          100% { opacity: 0.7; }
+        }
+        
+        .traffic-marker, .intersection-marker, .prediction-marker, .emergency-marker, .alert-marker {
+          box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+        }
+        
+        .bg-traffic-green { background-color: #4ade80; }
+        .bg-traffic-amber { background-color: #fbbf24; }
+        .bg-traffic-red { background-color: #ef4444; }
+      `}</style>
       
       {/* Map controls */}
       <div className="absolute top-4 right-4 bg-white p-2 rounded-md shadow-md z-10 space-y-2">
@@ -240,105 +428,6 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
           </div>
         </div>
       </div>
-      
-      {/* Traffic points */}
-      {showTraffic && trafficPoints.map(point => (
-        <div 
-          key={point.id}
-          className={`absolute ${viewMode === '3d' ? 'w-3 h-3' : 'w-2.5 h-2.5'} rounded-full ${getStatusColor(point.status)} transition-all duration-300`}
-          style={{
-            ...getPositionStyle(point.location.lat, point.location.lng),
-            ...get3DStyles(point.status),
-            zIndex: viewMode === '3d' ? Math.floor(point.speedKmph) : 2
-          }}
-          title={`${point.roadName}: ${point.speedKmph} km/h`}
-        />
-      ))}
-      
-      {/* Intersections */}
-      {showIntersections && intersections.map(intersection => (
-        <div 
-          key={intersection.id}
-          className={`absolute ${viewMode === '3d' ? 'w-5 h-5' : 'w-4 h-4'} rounded-sm border-2 border-white ${getStatusColor(intersection.status)} transition-all duration-300`}
-          style={{
-            ...getPositionStyle(intersection.location.lat, intersection.location.lng),
-            ...get3DStyles(intersection.status),
-            zIndex: viewMode === '3d' ? 5 : 3
-          }}
-          title={`${intersection.name}`}
-        />
-      ))}
-      
-      {/* Predictions */}
-      {showPredictions && predictions.map(prediction => (
-        <div 
-          key={prediction.id}
-          className={`absolute ${viewMode === '3d' ? 'w-5 h-5' : 'w-4 h-4'} rounded-full border border-white ${getStatusColor(prediction.predictedStatus)} animate-pulse-slow transition-all duration-300`}
-          style={{
-            ...getPositionStyle(prediction.location.lat, prediction.location.lng),
-            zIndex: 4
-          }}
-          title={`Predicted: ${prediction.predictedStatus} (${prediction.timeFrame})`}
-        >
-          <div className="absolute inset-0 rounded-full border-2 border-white" />
-        </div>
-      ))}
-      
-      {/* Alerts */}
-      {showAlerts && alerts.map(alert => (
-        <div 
-          key={alert.id}
-          className={`absolute ${viewMode === '3d' ? 'w-7 h-7' : 'w-6 h-6'} flex items-center justify-center transition-all duration-300`}
-          style={{
-            ...getPositionStyle(alert.location.lat, alert.location.lng),
-            zIndex: 10
-          }}
-          title={`${alert.type}: ${alert.description}`}
-        >
-          <div className={`w-full h-full bg-yellow-400 rotate-45 animate-pulse-slow ${viewMode === '3d' ? 'shadow-lg' : ''}`}>
-            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-red-600">!</div>
-          </div>
-        </div>
-      ))}
-      
-      {/* Emergency Vehicles */}
-      {showEmergencyVehicles && emergencyVehicles.map(vehicle => (
-        <div 
-          key={vehicle.id}
-          className={`absolute ${viewMode === '3d' ? 'w-5 h-5' : 'w-4 h-4'} ${getEmergencyVehicleColor(vehicle.type)} rounded-full animate-pulse-slow border border-white transition-all duration-300`}
-          style={{
-            ...getPositionStyle(vehicle.location.lat, vehicle.location.lng),
-            zIndex: 11
-          }}
-          title={`${vehicle.type} (${vehicle.priority} priority)`}
-        >
-          <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">
-            {vehicle.type === 'ambulance' ? 'A' : vehicle.type === 'police' ? 'P' : 'F'}
-          </div>
-        </div>
-      ))}
-      
-      {/* 3D buildings layer (only shown in 3D mode) */}
-      {viewMode === '3d' && (
-        <div className="absolute inset-0 pointer-events-none z-[2]">
-          {/* In a real implementation, this would contain actual 3D buildings */}
-          {/* For demonstration, we'll just show a few sample buildings */}
-          {[1, 2, 3, 4, 5].map(i => (
-            <div 
-              key={`building-${i}`}
-              className="absolute bg-gray-300/70 border border-gray-400"
-              style={{
-                width: `${20 + Math.random() * 30}px`,
-                height: `${20 + Math.random() * 30}px`,
-                left: `${10 + Math.random() * 80}%`,
-                top: `${10 + Math.random() * 80}%`,
-                transform: `translateZ(${10 + Math.random() * 20}px) rotateX(60deg)`,
-                boxShadow: '0 0 10px rgba(0,0,0,0.2)'
-              }}
-            ></div>
-          ))}
-        </div>
-      )}
     </div>
   );
 };
