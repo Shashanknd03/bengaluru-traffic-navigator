@@ -54,6 +54,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
   const [markersInitialized, setMarkersInitialized] = useState(false);
+  const [styleLoaded, setStyleLoaded] = useState(false);
   
   // Store marker references for cleanup
   const trafficMarkersRef = useRef<mapboxgl.Marker[]>([]);
@@ -82,8 +83,12 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
     // Save map reference
     mapRef.current = map;
     
-    // Set up 3D terrain if using 3D mode
-    map.on('load', () => {
+    // Listen for style load event
+    map.on('style.load', () => {
+      console.log('Map style loaded');
+      setStyleLoaded(true);
+
+      // Now it's safe to add 3D terrain
       if (viewMode === '3d') {
         map.addSource('mapbox-dem', {
           'type': 'raster-dem',
@@ -91,9 +96,12 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
           'tileSize': 512,
           'maxzoom': 14
         });
-        
-        map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-        
+
+        map.setTerrain({ 
+          'source': 'mapbox-dem', 
+          'exaggeration': 1.5 
+        });
+
         map.addLayer({
           'id': 'sky',
           'type': 'sky',
@@ -111,60 +119,89 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       clearAllMarkers();
       map.remove();
       mapRef.current = null;
+      setStyleLoaded(false);
     };
   }, []);
   
   // Handle view mode change
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !styleLoaded) return;
     
     map.setPitch(viewMode === '3d' ? 45 : 0);
     
     if (viewMode === '3d' && map.getStyle().layers) {
       // Add 3D terrain if not already added
       if (!map.getSource('mapbox-dem')) {
-        map.addSource('mapbox-dem', {
-          'type': 'raster-dem',
-          'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          'tileSize': 512,
-          'maxzoom': 14
-        });
-        
-        map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+        try {
+          map.addSource('mapbox-dem', {
+            'type': 'raster-dem',
+            'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            'tileSize': 512,
+            'maxzoom': 14
+          });
+          
+          map.setTerrain({ 
+            'source': 'mapbox-dem', 
+            'exaggeration': 1.5 
+          });
+        } catch (err) {
+          console.error('Error adding terrain:', err);
+        }
       }
       
       // Add sky layer if not already added
       if (!map.getLayer('sky')) {
-        map.addLayer({
-          'id': 'sky',
-          'type': 'sky',
-          'paint': {
-            'sky-type': 'atmosphere',
-            'sky-atmosphere-sun': [0.0, 0.0],
-            'sky-atmosphere-sun-intensity': 15
-          }
-        });
+        try {
+          map.addLayer({
+            'id': 'sky',
+            'type': 'sky',
+            'paint': {
+              'sky-type': 'atmosphere',
+              'sky-atmosphere-sun': [0.0, 0.0],
+              'sky-atmosphere-sun-intensity': 15
+            }
+          });
+        } catch (err) {
+          console.error('Error adding sky layer:', err);
+        }
       }
     } else if (viewMode === '2d') {
       // Remove terrain in 2D mode
-      map.setTerrain(null);
-      
-      // Remove sky layer in 2D mode
-      if (map.getLayer('sky')) {
-        map.removeLayer('sky');
+      try {
+        map.setTerrain(null);
+        
+        // Remove sky layer in 2D mode
+        if (map.getLayer('sky')) {
+          map.removeLayer('sky');
+        }
+      } catch (err) {
+        console.error('Error removing 3D elements:', err);
       }
     }
     
     // Refresh all markers
     updateMapMarkers();
-  }, [viewMode]);
+  }, [viewMode, styleLoaded]);
   
   // Update markers when data or visibility changes
   useEffect(() => {
-    updateMapMarkers();
-  }, [trafficPoints, intersections, predictions, alerts, emergencyVehicles, 
-      showTraffic, showIntersections, showPredictions, showAlerts, showEmergencyVehicles]);
+    if (styleLoaded) {
+      updateMapMarkers();
+    }
+  }, [
+    trafficPoints, 
+    intersections, 
+    predictions, 
+    alerts, 
+    emergencyVehicles, 
+    showTraffic, 
+    showIntersections, 
+    showPredictions, 
+    showAlerts, 
+    showEmergencyVehicles,
+    styleLoaded
+  ]);
   
   // Clear all markers
   const clearAllMarkers = () => {
@@ -183,7 +220,9 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   
   // Update all map markers
   const updateMapMarkers = () => {
-    if (!mapRef.current || !mapRef.current.loaded()) return;
+    if (!mapRef.current || !styleLoaded || !mapRef.current.loaded()) {
+      return;
+    }
     
     // Clear existing markers
     clearAllMarkers();
