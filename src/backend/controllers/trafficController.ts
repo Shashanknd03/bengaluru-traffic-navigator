@@ -19,7 +19,8 @@ export const getTrafficPointsByArea = async (req: Request, res: Response, next: 
     const { north, south, east, west } = req.query;
     
     if (!north || !south || !east || !west) {
-      return res.status(400).json({ message: 'Missing coordinates for bounding box' });
+      res.status(400).json({ message: 'Missing coordinates for bounding box' });
+      return;
     }
 
     const trafficPoints = await TrafficPoint.find({

@@ -25,7 +25,8 @@ export const getAlertsByArea = async (req: Request, res: Response, next: NextFun
     const { north, south, east, west } = req.query;
     
     if (!north || !south || !east || !west) {
-      return res.status(400).json({ message: 'Missing coordinates for bounding box' });
+      res.status(400).json({ message: 'Missing coordinates for bounding box' });
+      return;
     }
 
     const alerts = await TrafficAlert.find({
@@ -68,7 +69,8 @@ export const updateAlert = async (req: Request, res: Response, next: NextFunctio
     );
 
     if (!updatedAlert) {
-      return res.status(404).json({ message: 'Alert not found' });
+      res.status(404).json({ message: 'Alert not found' });
+      return;
     }
 
     res.status(200).json(updatedAlert);
@@ -84,7 +86,8 @@ export const closeAlert = async (req: Request, res: Response, next: NextFunction
     const alert = await TrafficAlert.findById(id);
 
     if (!alert) {
-      return res.status(404).json({ message: 'Alert not found' });
+      res.status(404).json({ message: 'Alert not found' });
+      return;
     }
 
     alert.endTime = new Date();
