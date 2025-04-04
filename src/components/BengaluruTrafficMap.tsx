@@ -1,155 +1,95 @@
 
-import React, { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import React from 'react';
 import { Card } from '@/components/ui/card';
-import { Map, MapPin, AlertTriangle } from 'lucide-react';
-import { generateMockTrafficPoints } from '../data/mockTrafficData';
-
-// Bengaluru coordinates
-const BENGALURU_CENTER: [number, number] = [77.5946, 12.9716];
-
-// Use a public token for demo purposes
-mapboxgl.accessToken = 'pk.eyJ1IjoiZGVtb3VzZXIiLCJhIjoiY2txOHoxb2k4MDYxbDJ2bnhpZGloZWprcCJ9.lRLjk3y3u1ZwGBxW_jZ9Lw';
+import { Map, MapPin, Info } from 'lucide-react';
 
 const BengaluruTrafficMap = () => {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [mapError, setMapError] = useState<string | null>(null);
-  
-  // Initialize map on component mount
-  useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
-    
-    try {
-      const map = new mapboxgl.Map({
-        container: mapContainerRef.current,
-        style: 'mapbox://styles/mapbox/streets-v11',
-        center: BENGALURU_CENTER,
-        zoom: 11,
-        pitch: 0,
-        bearing: 0,
-      });
-      
-      // Add navigation controls
-      map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-      
-      // Save map reference
-      mapRef.current = map;
-      
-      // Handle map load events
-      map.on('load', () => {
-        setMapLoaded(true);
-        
-        // Try to add some basic markers for Bangalore landmarks
-        try {
-          addBangaloreLandmarks(map);
-        } catch (err) {
-          console.error('Error adding landmarks:', err);
-        }
-      });
-      
-      map.on('error', (e) => {
-        console.error('Map error:', e);
-        setMapError('Failed to load map properly. Using fallback view.');
-      });
-    } catch (err) {
-      console.error('Failed to initialize map:', err);
-      setMapError('Failed to initialize map. Using fallback view.');
-    }
-    
-    // Cleanup
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-      setMapLoaded(false);
-    };
-  }, []);
-  
-  // Add some basic landmarks
-  const addBangaloreLandmarks = (map: mapboxgl.Map) => {
-    const landmarks = [
-      { name: "Cubbon Park", location: [77.5933, 12.9763] },
-      { name: "Lalbagh Botanical Garden", location: [77.5855, 12.9507] },
-      { name: "Bangalore Palace", location: [77.5921, 12.9983] },
-      { name: "Vidhana Soudha", location: [77.5906, 12.9797] },
-      { name: "UB City", location: [77.5957, 12.9715] }
-    ];
-    
-    landmarks.forEach(landmark => {
-      new mapboxgl.Marker({ color: "#4ade80" })
-        .setLngLat(landmark.location as [number, number])
-        .setPopup(new mapboxgl.Popup().setHTML(`<h3>${landmark.name}</h3>`))
-        .addTo(map);
-    });
-  };
-  
-  // Fallback map component
-  const FallbackMap = () => (
-    <div className="h-full flex flex-col items-center justify-center bg-gray-100 rounded-lg p-6">
-      <Map size={64} className="text-gray-400 mb-4" />
-      <h3 className="text-xl font-semibold text-gray-700 mb-2">Bangalore Map View</h3>
-      <p className="text-gray-500 text-center max-w-md mb-4">
-        {mapError || "This is a static representation of Bangalore's city map."}
-      </p>
-      <div className="grid grid-cols-2 gap-4 mt-2">
-        <div className="bg-white p-3 rounded shadow-sm">
-          <h4 className="font-medium text-sm mb-1">Key Landmarks</h4>
-          <ul className="text-xs text-gray-600 space-y-1">
-            <li className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              Cubbon Park
-            </li>
-            <li className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              Lalbagh
-            </li>
-            <li className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              Vidhana Soudha
-            </li>
-          </ul>
-        </div>
-        <div className="bg-white p-3 rounded shadow-sm">
-          <h4 className="font-medium text-sm mb-1">Traffic Legend</h4>
-          <div className="grid grid-cols-1 gap-1">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-green-400"></div>
-              <span className="text-xs">Low</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-amber-400"></div>
-              <span className="text-xs">Medium</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-red-500"></div>
-              <span className="text-xs">High</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-  
+  // Offline map implementation using static data visualization
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="h-[600px] relative bg-gray-100">
-        {mapError && (
-          <div className="absolute top-0 left-0 right-0 bg-amber-50 border-b border-amber-200 p-2 z-20">
-            <div className="flex items-center gap-2 text-amber-600 text-sm">
-              <AlertTriangle size={16} />
-              <span>{mapError}</span>
+      <div className="h-[600px] relative bg-gray-50">
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+          <div className="w-full max-w-4xl h-full rounded-lg overflow-hidden relative bg-gray-100 shadow-inner">
+            {/* Static map visualization */}
+            <div className="absolute inset-0">
+              <svg width="100%" height="100%" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+                {/* Bengaluru outline shape */}
+                <path 
+                  d="M400,150 C500,150 550,250 550,300 C550,400 480,450 400,450 C320,450 250,400 250,300 C250,250 300,150 400,150 Z" 
+                  fill="#e5e7eb" 
+                  stroke="#9ca3af" 
+                  strokeWidth="2"
+                />
+                
+                {/* Major roads */}
+                <path d="M400,150 L400,450" stroke="#9ca3af" strokeWidth="4" strokeLinecap="round" />
+                <path d="M250,300 L550,300" stroke="#9ca3af" strokeWidth="4" strokeLinecap="round" />
+                <path d="M320,200 L480,200" stroke="#9ca3af" strokeWidth="3" strokeLinecap="round" />
+                <path d="M320,400 L480,400" stroke="#9ca3af" strokeWidth="3" strokeLinecap="round" />
+                <path d="M300,180 L350,250" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+                <path d="M500,180 L450,250" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+                <path d="M300,420 L350,350" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+                <path d="M500,420 L450,350" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+                
+                {/* Traffic hotspots */}
+                <circle cx="400" cy="300" r="15" fill="#ef4444" opacity="0.8" /> {/* Silk Board */}
+                <circle cx="480" cy="200" r="12" fill="#ef4444" opacity="0.8" /> {/* KR Puram */}
+                <circle cx="350" cy="250" r="12" fill="#fbbf24" opacity="0.8" /> {/* Outer Ring Road */}
+                <circle cx="450" cy="350" r="12" fill="#fbbf24" opacity="0.8" /> {/* Marathahalli */}
+                
+                {/* Landmarks */}
+                <circle cx="400" cy="250" r="8" fill="#4ade80" /> {/* Cubbon Park */}
+                <circle cx="380" cy="350" r="8" fill="#4ade80" /> {/* Lalbagh */}
+                <circle cx="420" cy="220" r="8" fill="#4ade80" /> {/* Vidhana Soudha */}
+                <circle cx="450" cy="280" r="8" fill="#4ade80" /> {/* UB City */}
+                <circle cx="320" cy="320" r="8" fill="#4ade80" /> {/* Bangalore Palace */}
+              </svg>
+            </div>
+            
+            {/* Overlay with landmark labels */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute top-[245px] left-[390px] transform -translate-x-1/2 -translate-y-1/2">
+                <div className="bg-white/80 px-2 py-1 rounded text-xs">Cubbon Park</div>
+              </div>
+              <div className="absolute top-[350px] left-[370px] transform -translate-x-1/2 -translate-y-1/2">
+                <div className="bg-white/80 px-2 py-1 rounded text-xs">Lalbagh</div>
+              </div>
+              <div className="absolute top-[220px] left-[430px] transform -translate-x-1/2 -translate-y-1/2">
+                <div className="bg-white/80 px-2 py-1 rounded text-xs">Vidhana Soudha</div>
+              </div>
+              
+              {/* Traffic hotspot labels */}
+              <div className="absolute top-[300px] left-[410px] transform -translate-x-1/2 -translate-y-1/2">
+                <div className="bg-red-50 border border-red-200 px-2 py-1 rounded text-xs text-red-700">Silk Board</div>
+              </div>
+              <div className="absolute top-[190px] left-[490px] transform -translate-x-1/2 -translate-y-1/2">
+                <div className="bg-red-50 border border-red-200 px-2 py-1 rounded text-xs text-red-700">KR Puram</div>
+              </div>
+            </div>
+            
+            {/* City center marker */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
+              <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                <div className="w-4 h-4 rounded-full bg-blue-500 border-2 border-white"></div>
+              </div>
+              <div className="absolute top-8 left-1/2 transform -translate-x-1/2 bg-white px-2 py-1 rounded shadow-sm text-xs font-medium">
+                City Center
+              </div>
             </div>
           </div>
-        )}
-        
-        <div ref={mapContainerRef} className="absolute inset-0" />
-        
-        {/* Show fallback if map fails to load */}
-        {mapError && <div className="absolute inset-0 z-10"><FallbackMap /></div>}
+          
+          {/* Compass */}
+          <div className="absolute top-4 right-4 bg-white/90 w-10 h-10 rounded-full shadow-md flex items-center justify-center">
+            <div className="relative w-6 h-6">
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-1 h-2 bg-red-500"></div>
+              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-2 bg-gray-400"></div>
+              <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-2 h-1 bg-gray-400"></div>
+              <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-2 h-1 bg-gray-400"></div>
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-gray-200"></div>
+              <div className="absolute top-1 left-1/2 transform -translate-x-1/2 text-[8px] font-bold">N</div>
+            </div>
+          </div>
+        </div>
         
         {/* Traffic Legend */}
         <div className="absolute bottom-4 left-4 bg-white/90 p-2 rounded-md shadow-md z-10">
@@ -170,6 +110,21 @@ const BengaluruTrafficMap = () => {
             <div className="flex items-center gap-1">
               <div className="w-3 h-3 rounded-full bg-red-800"></div>
               <span className="text-xs">Severe</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Landmarks Legend */}
+        <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-md shadow-md z-10">
+          <div className="text-xs font-medium mb-1">Landmarks</div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded-full bg-green-400"></div>
+              <span className="text-xs">Popular Places</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+              <span className="text-xs">City Center</span>
             </div>
           </div>
         </div>
