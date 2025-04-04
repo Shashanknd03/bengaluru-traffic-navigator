@@ -14,8 +14,8 @@ const BengaluruMap = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Bengaluru Traffic Map</h1>
             <p className="text-gray-600">
-              Real-time visualization of traffic conditions across Bengaluru. 
-              The map shows current traffic levels from low (green) to severe (dark red).
+              Offline visualization of traffic conditions across Bengaluru. 
+              The map shows simulated traffic levels from low (green) to severe (dark red).
             </p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center gap-2 text-sm bg-blue-50 text-blue-700 p-2 rounded">
