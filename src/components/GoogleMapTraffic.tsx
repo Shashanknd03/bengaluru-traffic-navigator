@@ -322,6 +322,36 @@ const GoogleMapTraffic: React.FC = () => {
     });
   };
 
+  // Add the missing functions for map controls
+  const handleZoomIn = () => {
+    if (mapRef) {
+      mapRef.setZoom((mapRef.getZoom() || 12) + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapRef) {
+      mapRef.setZoom((mapRef.getZoom() || 12) - 1);
+    }
+  };
+
+  const resetView = () => {
+    if (mapRef) {
+      mapRef.panTo(BENGALURU_CENTER);
+      mapRef.setZoom(12);
+    }
+  };
+
+  const toggleTraffic = () => {
+    setIsTrafficVisible(prev => !prev);
+    toast({
+      title: isTrafficVisible ? "Traffic layer disabled" : "Traffic layer enabled",
+      description: isTrafficVisible 
+        ? "The traffic overlay has been hidden." 
+        : "Now showing real-time traffic data overlay.",
+    });
+  };
+
   if (loadError) {
     return (
       <Card className="p-6 text-center bg-red-50">
