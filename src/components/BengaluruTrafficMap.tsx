@@ -3,16 +3,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Card } from '@/components/ui/card';
+import { Map, MapPin, AlertTriangle } from 'lucide-react';
 import { generateMockTrafficPoints } from '../data/mockTrafficData';
 
 // Bengaluru coordinates
 const BENGALURU_CENTER: [number, number] = [77.5946, 12.9716];
-const BENGALURU_BOUNDS = {
-  north: 13.1,
-  south: 12.8,
-  east: 77.8,
-  west: 77.4
-};
 
 // Use a public token for demo purposes
 mapboxgl.accessToken = 'pk.eyJ1IjoiZGVtb3VzZXIiLCJhIjoiY2txOHoxb2k4MDYxbDJ2bnhpZGloZWprcCJ9.lRLjk3y3u1ZwGBxW_jZ9Lw';
@@ -20,204 +15,141 @@ mapboxgl.accessToken = 'pk.eyJ1IjoiZGVtb3VzZXIiLCJhIjoiY2txOHoxb2k4MDYxbDJ2bnhpZ
 const BengaluruTrafficMap = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const [styleLoaded, setStyleLoaded] = useState(false);
-  
-  // Generate traffic data
-  const trafficPoints = generateMockTrafficPoints(100);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   
   // Initialize map on component mount
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v11',
-      center: BENGALURU_CENTER,
-      zoom: 11,
-      pitch: 0,
-      bearing: 0,
-      bounds: [
-        [BENGALURU_BOUNDS.west, BENGALURU_BOUNDS.south], 
-        [BENGALURU_BOUNDS.east, BENGALURU_BOUNDS.north]
-      ],
-      fitBoundsOptions: { padding: 40 }
-    });
-    
-    // Add navigation controls
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    
-    // Save map reference
-    mapRef.current = map;
-    
-    // Listen for style load event
-    map.on('style.load', () => {
-      console.log('Map style loaded');
-      setStyleLoaded(true);
+    try {
+      const map = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: 'mapbox://styles/mapbox/streets-v11',
+        center: BENGALURU_CENTER,
+        zoom: 11,
+        pitch: 0,
+        bearing: 0,
+      });
       
-      // Add traffic data to the map after style is loaded
-      addTrafficData(map, trafficPoints);
-    });
+      // Add navigation controls
+      map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+      
+      // Save map reference
+      mapRef.current = map;
+      
+      // Handle map load events
+      map.on('load', () => {
+        setMapLoaded(true);
+        
+        // Try to add some basic markers for Bangalore landmarks
+        try {
+          addBangaloreLandmarks(map);
+        } catch (err) {
+          console.error('Error adding landmarks:', err);
+        }
+      });
+      
+      map.on('error', (e) => {
+        console.error('Map error:', e);
+        setMapError('Failed to load map properly. Using fallback view.');
+      });
+    } catch (err) {
+      console.error('Failed to initialize map:', err);
+      setMapError('Failed to initialize map. Using fallback view.');
+    }
     
     // Cleanup
     return () => {
-      map.remove();
-      mapRef.current = null;
-      setStyleLoaded(false);
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+      setMapLoaded(false);
     };
   }, []);
   
-  // Add traffic data to the map
-  const addTrafficData = (map: mapboxgl.Map, points: any[]) => {
-    // Add source for traffic points
-    map.addSource('traffic-points', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: points.map(point => ({
-          type: 'Feature',
-          properties: {
-            status: point.status,
-            roadName: point.roadName,
-            speedKmph: point.speedKmph
-          },
-          geometry: {
-            type: 'Point',
-            coordinates: [point.location.lng, point.location.lat]
-          }
-        }))
-      }
-    });
+  // Add some basic landmarks
+  const addBangaloreLandmarks = (map: mapboxgl.Map) => {
+    const landmarks = [
+      { name: "Cubbon Park", location: [77.5933, 12.9763] },
+      { name: "Lalbagh Botanical Garden", location: [77.5855, 12.9507] },
+      { name: "Bangalore Palace", location: [77.5921, 12.9983] },
+      { name: "Vidhana Soudha", location: [77.5906, 12.9797] },
+      { name: "UB City", location: [77.5957, 12.9715] }
+    ];
     
-    // Add traffic points layer
-    map.addLayer({
-      id: 'traffic-points',
-      type: 'circle',
-      source: 'traffic-points',
-      paint: {
-        'circle-radius': 5,
-        'circle-color': [
-          'match',
-          ['get', 'status'],
-          'low', '#4ade80',    // green
-          'medium', '#fbbf24', // amber
-          'high', '#ef4444',   // red
-          'severe', '#991b1b', // dark red
-          '#888888'            // default gray
-        ],
-        'circle-opacity': 0.8,
-        'circle-stroke-width': 1,
-        'circle-stroke-color': '#ffffff'
-      }
-    });
-    
-    // Add road congestion layer
-    addCongestionLayer(map, points);
-    
-    // Add popup on hover
-    map.on('mouseenter', 'traffic-points', (e) => {
-      if (e.features && e.features.length > 0) {
-        const coordinates = (e.features[0].geometry as any).coordinates.slice();
-        const properties = e.features[0].properties;
-        
-        const popup = new mapboxgl.Popup({
-          closeButton: false,
-          className: 'traffic-popup'
-        })
-          .setLngLat(coordinates)
-          .setHTML(`
-            <div>
-              <h4 class="font-semibold">${properties.roadName}</h4>
-              <p>Status: <span class="capitalize">${properties.status}</span></p>
-              <p>Speed: ${properties.speedKmph} km/h</p>
-            </div>
-          `)
-          .addTo(map);
-        
-        map.getCanvas().style.cursor = 'pointer';
-      }
-    });
-    
-    map.on('mouseleave', 'traffic-points', () => {
-      map.getCanvas().style.cursor = '';
-      const popups = document.getElementsByClassName('traffic-popup');
-      if (popups[0]) (popups[0] as any).remove();
+    landmarks.forEach(landmark => {
+      new mapboxgl.Marker({ color: "#4ade80" })
+        .setLngLat(landmark.location as [number, number])
+        .setPopup(new mapboxgl.Popup().setHTML(`<h3>${landmark.name}</h3>`))
+        .addTo(map);
     });
   };
   
-  // Add congestion layer using line strings connecting nearby points
-  const addCongestionLayer = (map: mapboxgl.Map, points: any[]) => {
-    // Create road segments based on points and their status
-    const roadSegments = {
-      type: 'FeatureCollection',
-      features: []
-    };
-    
-    // Create segments between nearby points with similar status
-    for (let i = 0; i < points.length; i++) {
-      for (let j = i + 1; j < points.length; j++) {
-        const p1 = points[i];
-        const p2 = points[j];
-        
-        // Calculate distance
-        const dx = p1.location.lng - p2.location.lng;
-        const dy = p1.location.lat - p2.location.lat;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // Connect if they're within a threshold and on the same road
-        if (distance < 0.01 && p1.roadName === p2.roadName) {
-          roadSegments.features.push({
-            type: 'Feature',
-            properties: {
-              status: p1.status,
-              roadName: p1.roadName
-            },
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [p1.location.lng, p1.location.lat],
-                [p2.location.lng, p2.location.lat]
-              ]
-            }
-          });
-        }
-      }
-    }
-    
-    // Add source for road congestion
-    map.addSource('road-congestion', {
-      type: 'geojson',
-      data: roadSegments as any
-    });
-    
-    // Add road congestion layer
-    map.addLayer({
-      id: 'road-congestion',
-      type: 'line',
-      source: 'road-congestion',
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
-      paint: {
-        'line-width': 4,
-        'line-color': [
-          'match',
-          ['get', 'status'],
-          'low', '#4ade80',    // green
-          'medium', '#fbbf24', // amber
-          'high', '#ef4444',   // red
-          'severe', '#991b1b', // dark red
-          '#888888'            // default gray
-        ],
-        'line-opacity': 0.7
-      }
-    });
-  };
+  // Fallback map component
+  const FallbackMap = () => (
+    <div className="h-full flex flex-col items-center justify-center bg-gray-100 rounded-lg p-6">
+      <Map size={64} className="text-gray-400 mb-4" />
+      <h3 className="text-xl font-semibold text-gray-700 mb-2">Bangalore Map View</h3>
+      <p className="text-gray-500 text-center max-w-md mb-4">
+        {mapError || "This is a static representation of Bangalore's city map."}
+      </p>
+      <div className="grid grid-cols-2 gap-4 mt-2">
+        <div className="bg-white p-3 rounded shadow-sm">
+          <h4 className="font-medium text-sm mb-1">Key Landmarks</h4>
+          <ul className="text-xs text-gray-600 space-y-1">
+            <li className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              Cubbon Park
+            </li>
+            <li className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              Lalbagh
+            </li>
+            <li className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+              Vidhana Soudha
+            </li>
+          </ul>
+        </div>
+        <div className="bg-white p-3 rounded shadow-sm">
+          <h4 className="font-medium text-sm mb-1">Traffic Legend</h4>
+          <div className="grid grid-cols-1 gap-1">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-green-400"></div>
+              <span className="text-xs">Low</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+              <span className="text-xs">Medium</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-red-500"></div>
+              <span className="text-xs">High</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
   
   return (
     <Card className="p-0 overflow-hidden">
       <div className="h-[600px] relative bg-gray-100">
+        {mapError && (
+          <div className="absolute top-0 left-0 right-0 bg-amber-50 border-b border-amber-200 p-2 z-20">
+            <div className="flex items-center gap-2 text-amber-600 text-sm">
+              <AlertTriangle size={16} />
+              <span>{mapError}</span>
+            </div>
+          </div>
+        )}
+        
         <div ref={mapContainerRef} className="absolute inset-0" />
+        
+        {/* Show fallback if map fails to load */}
+        {mapError && <div className="absolute inset-0 z-10"><FallbackMap /></div>}
         
         {/* Traffic Legend */}
         <div className="absolute bottom-4 left-4 bg-white/90 p-2 rounded-md shadow-md z-10">
