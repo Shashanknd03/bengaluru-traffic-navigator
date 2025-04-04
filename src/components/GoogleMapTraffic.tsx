@@ -1,10 +1,10 @@
-
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, TrafficLayer, Marker, InfoWindow } from '@react-google-maps/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { MapPin, Plus, Minus, RotateCcw, Map } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertTriangle, MapPin, Plus, Minus, RotateCcw, Map, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 // Bengaluru center coordinates
@@ -60,6 +60,11 @@ const GoogleMapTraffic: React.FC = () => {
   const [locationInput, setLocationInput] = useState('');
   const [isTrafficVisible, setIsTrafficVisible] = useState(true);
   const { toast } = useToast();
+  
+  const [dateFilter, setDateFilter] = useState<Date | undefined>(new Date());
+  const [timeOfDay, setTimeOfDay] = useState<string>('current');
+  const [refreshInterval, setRefreshInterval] = useState<number | null>(10000); // 10 seconds
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(true);
 
   // Load Google Maps API
   const { isLoaded, loadError } = useJsApiLoader({
@@ -90,35 +95,137 @@ const GoogleMapTraffic: React.FC = () => {
     };
   };
 
-  // Handle search for location
+  // Setup auto-refresh
+  useEffect(() => {
+    if (!autoRefreshEnabled || !refreshInterval) {
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      simulateTrafficUpdate();
+    }, refreshInterval);
+    
+    return () => clearInterval(interval);
+  }, [autoRefreshEnabled, refreshInterval]);
+
+  // Simulate real-time traffic updates
+  const simulateTrafficUpdate = () => {
+    if (!mapRef) return;
+    
+    // Update existing markers with slightly different traffic conditions
+    const updatedMarkers = markers.map(marker => {
+      const trafficLevels: Array<'low' | 'medium' | 'high' | 'severe'> = ['low', 'medium', 'high', 'severe'];
+      const currentIndex = trafficLevels.indexOf(marker.traffic);
+      
+      // 30% chance to change traffic level
+      const shouldChange = Math.random() < 0.3;
+      
+      if (!shouldChange) return marker;
+      
+      // Determine new traffic level (more likely to stay similar than jump dramatically)
+      let newIndex = currentIndex;
+      const change = Math.random();
+      
+      if (change < 0.6) {
+        // 60% chance to move by 1 level
+        newIndex = Math.max(0, Math.min(3, currentIndex + (Math.random() < 0.5 ? 1 : -1)));
+      } else if (change < 0.9) {
+        // 30% chance to stay the same
+        newIndex = currentIndex;
+      } else {
+        // 10% chance to jump 2 levels
+        newIndex = Math.max(0, Math.min(3, currentIndex + (Math.random() < 0.5 ? 2 : -2)));
+      }
+      
+      return {
+        ...marker,
+        traffic: trafficLevels[newIndex],
+        info: `Updated at ${new Date().toLocaleTimeString()} - ${trafficLevels[newIndex]} traffic conditions.`
+      };
+    });
+    
+    setMarkers(updatedMarkers);
+    
+    toast({
+      title: "Traffic data updated",
+      description: `Real-time traffic conditions refreshed at ${new Date().toLocaleTimeString()}`,
+      variant: "default",
+    });
+  };
+
+  // Handle search for location (enhanced version)
   const handleSearch = () => {
     if (!locationInput || !mapRef) return;
     
-    // In a real app, we would use the Places API to geocode the address
-    // For this demo, just show a toast and manually add a marker
     toast({
       title: "Searching for location",
       description: `Finding "${locationInput}" on the map...`
     });
     
-    // Simulate finding a location
+    // In a real implementation, we would use the Google Places API
+    // For this demo, simulate geocoding with a delay
     setTimeout(() => {
-      // Add a new marker at a slightly offset position from center
+      // Generate a somewhat realistic position by modifying the center coordinates
+      // This makes it seem like we found different locations based on the search
+      const searchTerm = locationInput.toLowerCase();
+      let position = { ...BENGALURU_CENTER };
+      
+      // Adjust position based on common Bengaluru locations
+      if (searchTerm.includes('koramangala')) {
+        position = { lat: 12.9352, lng: 77.6245 };
+      } else if (searchTerm.includes('whitefield')) {
+        position = { lat: 12.9698, lng: 77.7500 };
+      } else if (searchTerm.includes('electronic city') || searchTerm.includes('electronics city')) {
+        position = { lat: 12.8399, lng: 77.6770 };
+      } else if (searchTerm.includes('indiranagar')) {
+        position = { lat: 12.9784, lng: 77.6408 };
+      } else if (searchTerm.includes('mg road') || searchTerm.includes('m.g. road')) {
+        position = { lat: 12.9758, lng: 77.6261 };
+      } else if (searchTerm.includes('hsr')) {
+        position = { lat: 12.9116, lng: 77.6741 };
+      } else if (searchTerm.includes('silk board') || searchTerm.includes('silkboard')) {
+        position = { lat: 12.9170, lng: 77.6209 };
+      } else {
+        // Random position within Bengaluru for other searches
+        position = {
+          lat: BENGALURU_CENTER.lat + (Math.random() * 0.06 - 0.03),
+          lng: BENGALURU_CENTER.lng + (Math.random() * 0.06 - 0.03)
+        };
+      }
+      
+      // Traffic conditions based on time of day and location
+      const currentHour = new Date().getHours();
+      let likelyTraffic: 'low' | 'medium' | 'high' | 'severe' = 'medium';
+      
+      // Check if location is a known traffic hotspot
+      const isHotspot = ['silk board', 'silkboard', 'whitefield', 'marathahalli'].some(hotspot => 
+        searchTerm.includes(hotspot)
+      );
+      
+      // Set traffic based on time of day
+      if (currentHour >= 8 && currentHour <= 10) {
+        likelyTraffic = isHotspot ? 'severe' : 'high'; // Morning rush
+      } else if (currentHour >= 17 && currentHour <= 19) {
+        likelyTraffic = isHotspot ? 'severe' : 'high'; // Evening rush
+      } else if (currentHour >= 22 || currentHour <= 5) {
+        likelyTraffic = 'low'; // Late night
+      } else {
+        likelyTraffic = isHotspot ? 'high' : 'medium'; // Regular hours
+      }
+      
+      // Create new marker
       const newMarker: MarkerInfo = {
         id: Date.now().toString(),
-        position: { 
-          lat: BENGALURU_CENTER.lat + (Math.random() * 0.03 - 0.015),
-          lng: BENGALURU_CENTER.lng + (Math.random() * 0.03 - 0.015)
-        },
+        position,
         title: locationInput,
-        info: `Location added based on search: ${locationInput}`,
-        traffic: ['low', 'medium', 'high', 'severe'][Math.floor(Math.random() * 4)] as 'low' | 'medium' | 'high' | 'severe'
+        info: `Traffic analysis for "${locationInput}" - ${likelyTraffic} traffic conditions.`,
+        traffic: likelyTraffic
       };
       
       setMarkers(prev => [...prev, newMarker]);
       
       // Center map on new marker
-      mapRef.panTo(newMarker.position);
+      mapRef.panTo(position);
       mapRef.setZoom(14);
       
       // Select the marker to show info window
@@ -131,31 +238,88 @@ const GoogleMapTraffic: React.FC = () => {
       
       // Clear input
       setLocationInput('');
-    }, 1500);
+    }, 1000);
   };
 
-  // Toggle traffic layer
-  const toggleTraffic = () => {
-    setIsTrafficVisible(prev => !prev);
+  // Time of day filter handler
+  const handleTimeOfDayChange = (time: string) => {
+    setTimeOfDay(time);
+    
+    if (time === 'current') {
+      // Use current traffic
+      simulateTrafficUpdate();
+      return;
+    }
+    
+    // Simulate different traffic patterns based on time of day
+    const trafficPatterns = {
+      'morning': { // Morning rush hour
+        high: 0.5,    // 50% chance for high traffic
+        severe: 0.3,  // 30% chance for severe traffic
+        medium: 0.15, // 15% chance for medium traffic
+        low: 0.05     // 5% chance for low traffic
+      },
+      'midday': { // Midday
+        medium: 0.45, // 45% chance for medium traffic
+        low: 0.3,     // 30% chance for low traffic
+        high: 0.2,    // 20% chance for high traffic
+        severe: 0.05  // 5% chance for severe traffic
+      },
+      'evening': { // Evening rush hour
+        high: 0.45,   // 45% chance for high traffic
+        severe: 0.35, // 35% chance for severe traffic
+        medium: 0.15, // 15% chance for medium traffic
+        low: 0.05     // 5% chance for low traffic
+      },
+      'night': { // Night time
+        low: 0.6,     // 60% chance for low traffic
+        medium: 0.3,  // 30% chance for medium traffic
+        high: 0.08,   // 8% chance for high traffic
+        severe: 0.02  // 2% chance for severe traffic
+      }
+    };
+    
+    const pattern = trafficPatterns[time as keyof typeof trafficPatterns];
+    
+    const updatedMarkers = markers.map(marker => {
+      // Determine new traffic level based on probabilities
+      const random = Math.random();
+      let newTraffic: 'low' | 'medium' | 'high' | 'severe';
+      
+      if (random < pattern.low) {
+        newTraffic = 'low';
+      } else if (random < pattern.low + pattern.medium) {
+        newTraffic = 'medium';
+      } else if (random < pattern.low + pattern.medium + pattern.high) {
+        newTraffic = 'high';
+      } else {
+        newTraffic = 'severe';
+      }
+      
+      return {
+        ...marker,
+        traffic: newTraffic,
+        info: `${time.charAt(0).toUpperCase() + time.slice(1)} traffic simulation - ${newTraffic} traffic conditions.`
+      };
+    });
+    
+    setMarkers(updatedMarkers);
+    
+    toast({
+      title: "Time simulation applied",
+      description: `Showing typical ${time} traffic patterns for Bengaluru`,
+    });
   };
 
-  // Reset map view
-  const resetView = () => {
-    if (!mapRef) return;
-    mapRef.panTo(BENGALURU_CENTER);
-    mapRef.setZoom(12);
-    setSelectedMarker(null);
-  };
-
-  // Zoom controls
-  const handleZoomIn = () => {
-    if (!mapRef) return;
-    mapRef.setZoom(mapRef.getZoom()! + 1);
-  };
-  
-  const handleZoomOut = () => {
-    if (!mapRef) return;
-    mapRef.setZoom(mapRef.getZoom()! - 1);
+  // Toggle auto-refresh
+  const toggleAutoRefresh = () => {
+    setAutoRefreshEnabled(prev => !prev);
+    toast({
+      title: autoRefreshEnabled ? "Auto-refresh disabled" : "Auto-refresh enabled",
+      description: autoRefreshEnabled 
+        ? "Real-time updates have been paused. Use the refresh button to update manually." 
+        : "Map will now update automatically every 10 seconds.",
+    });
   };
 
   if (loadError) {
@@ -182,18 +346,46 @@ const GoogleMapTraffic: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-2">
-        <Input
-          value={locationInput}
-          onChange={(e) => setLocationInput(e.target.value)}
-          placeholder="Search for a location in Bengaluru"
-          className="flex-grow"
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-        />
-        <Button onClick={handleSearch}>
-          <MapPin className="h-4 w-4 mr-2" />
-          Search
-        </Button>
+      <div className="flex flex-col md:flex-row gap-4">
+        {/* Search box */}
+        <div className="flex-grow flex items-center space-x-2">
+          <Input
+            value={locationInput}
+            onChange={(e) => setLocationInput(e.target.value)}
+            placeholder="Search for a location in Bengaluru"
+            className="flex-grow"
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <Button onClick={handleSearch}>
+            <MapPin className="h-4 w-4 mr-2" />
+            Search
+          </Button>
+        </div>
+        
+        {/* Time filter */}
+        <div className="flex gap-2">
+          <Select value={timeOfDay} onValueChange={handleTimeOfDayChange}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Traffic time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">Current Traffic</SelectItem>
+              <SelectItem value="morning">Morning Rush</SelectItem>
+              <SelectItem value="midday">Midday Traffic</SelectItem>
+              <SelectItem value="evening">Evening Rush</SelectItem>
+              <SelectItem value="night">Night Traffic</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Button 
+            variant={autoRefreshEnabled ? "default" : "outline"} 
+            size="icon" 
+            onClick={toggleAutoRefresh}
+            title={autoRefreshEnabled ? "Disable auto-refresh" : "Enable auto-refresh"}
+          >
+            <RefreshCw className={`h-4 w-4 ${autoRefreshEnabled ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </div>
       
       <div className="relative">
@@ -325,6 +517,15 @@ const GoogleMapTraffic: React.FC = () => {
             </div>
           </div>
         </Card>
+      </div>
+      
+      <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" />
+          <p>
+            This is using a placeholder Google Maps API key. For production use, please replace with your own API key in the GoogleMapTraffic.tsx component.
+          </p>
+        </div>
       </div>
     </div>
   );
