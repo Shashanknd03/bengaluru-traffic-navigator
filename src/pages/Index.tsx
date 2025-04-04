@@ -13,7 +13,7 @@ const Index = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Traffic Management Dashboard</h1>
           <p className="text-gray-600 max-w-3xl">
-            Welcome to the Bengaluru Traffic Management System. This dashboard provides offline traffic visualization 
+            Welcome to the Bengaluru Traffic Management System. This dashboard provides traffic visualization 
             and analysis tools to help understand traffic patterns across the city.
           </p>
         </div>
@@ -50,11 +50,12 @@ const Index = () => {
                   <p className="text-sm text-gray-500">Traffic statistics and patterns</p>
                 </div>
               </div>
-              <button 
-                className="block w-full py-2 px-4 bg-gray-100 text-gray-500 text-center rounded-md cursor-not-allowed text-sm font-medium"
+              <Link 
+                to="/traffic-analytics" 
+                className="block w-full py-2 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 text-center rounded-md transition-colors text-sm font-medium"
               >
-                Coming Soon
-              </button>
+                View Analytics
+              </Link>
             </CardContent>
           </Card>
           
@@ -69,11 +70,12 @@ const Index = () => {
                   <p className="text-sm text-gray-500">Predicted traffic conditions</p>
                 </div>
               </div>
-              <button 
-                className="block w-full py-2 px-4 bg-gray-100 text-gray-500 text-center rounded-md cursor-not-allowed text-sm font-medium"
+              <Link 
+                to="/predictions" 
+                className="block w-full py-2 px-4 bg-green-50 hover:bg-green-100 text-green-700 text-center rounded-md transition-colors text-sm font-medium"
               >
-                Coming Soon
-              </button>
+                View Predictions
+              </Link>
             </CardContent>
           </Card>
         </div>
@@ -147,8 +149,8 @@ const Index = () => {
       </main>
       <footer className="bg-white border-t py-4">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2025 Bengaluru Traffic Management System | Offline Demo Version</p>
-          <p className="text-xs mt-1">This is a static demo system with simulated traffic data.</p>
+          <p>© 2025 Bengaluru Traffic Management System | Demo Version</p>
+          <p className="text-xs mt-1">Some features use simulated data for demonstration purposes.</p>
         </div>
       </footer>
     </div>

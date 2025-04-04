@@ -1,11 +1,28 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '@/components/Header';
-import BengaluruTrafficMap from '@/components/BengaluruTrafficMap';
 import { Card, CardContent } from '@/components/ui/card';
 import { MapPin, Info } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import GoogleMapTraffic from '@/components/GoogleMapTraffic';
+import BengaluruTrafficMap from '@/components/BengaluruTrafficMap';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
 
 const BengaluruMap = () => {
+  const [mapType, setMapType] = useState<'google' | 'offline'>('offline');
+  const { toast } = useToast();
+
+  const toggleMapType = () => {
+    setMapType(prev => prev === 'offline' ? 'google' : 'offline');
+    toast({
+      title: `Switched to ${mapType === 'offline' ? 'Google Maps' : 'Offline Map'}`,
+      description: mapType === 'offline' 
+        ? 'Now showing real-time traffic data via Google Maps API.' 
+        : 'Now showing offline visualization of traffic data.',
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
@@ -14,13 +31,19 @@ const BengaluruMap = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Bengaluru Traffic Map</h1>
             <p className="text-gray-600">
-              Offline visualization of traffic conditions across Bengaluru. 
-              The map shows simulated traffic levels from low (green) to severe (dark red).
+              {mapType === 'offline' 
+                ? 'Offline visualization of traffic conditions across Bengaluru.' 
+                : 'Real-time traffic visualization powered by Google Maps API.'}
             </p>
           </div>
-          <div className="mt-4 md:mt-0 flex items-center gap-2 text-sm bg-blue-50 text-blue-700 p-2 rounded">
-            <Info size={16} />
-            <span>Population: ~12 million | Area: 741 km²</span>
+          <div className="mt-4 md:mt-0 flex flex-col sm:flex-row gap-2">
+            <div className="flex items-center gap-2 text-sm bg-blue-50 text-blue-700 p-2 rounded">
+              <Info size={16} />
+              <span>Population: ~12 million | Area: 741 km²</span>
+            </div>
+            <Button onClick={toggleMapType} variant="outline" size="sm">
+              Switch to {mapType === 'offline' ? 'Google Maps' : 'Offline Map'}
+            </Button>
           </div>
         </div>
         
@@ -67,7 +90,7 @@ const BengaluruMap = () => {
           </Card>
         </div>
         
-        <BengaluruTrafficMap />
+        {mapType === 'offline' ? <BengaluruTrafficMap /> : <GoogleMapTraffic />}
         
         <div className="mt-6 grid md:grid-cols-2 gap-6">
           <Card className="bg-white">
